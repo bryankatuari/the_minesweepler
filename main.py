@@ -2,7 +2,7 @@ from engine.board import Board
 
 
 def test_board_basic():
-    """test 1: random mine generation  and board representation"""
+    """Test 1: Random and fixed mine generation  and board representation"""
     mines = None
     b = Board(width=10, height=10, num_mines=10, mines=mines)
 
@@ -11,7 +11,7 @@ def test_board_basic():
 
 
 def test_reveal_logic():
-    """test 2: reveal logic"""
+    """Test 2: Reveal logic"""
     mines = [(2, 2), (3, 3)]
     b = Board(width=5, height=5, num_mines=2, mines=mines)
 
@@ -28,7 +28,7 @@ def test_reveal_logic():
 
     print("Reveal a mine at (1, 1)…")
     v = b.reveal(1, 1)
-    print("Value at (1,1):", v)  # should be -1
+    print("Value at (1,1):", v)
     b.visible_print()
 
 

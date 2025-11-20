@@ -18,7 +18,7 @@ class Board:
         self.flags = set()
 
         if mines is not None:
-            # deterministic layout for testing
+            # predetermined layout for testing
             assert len(mines) == num_mines, "mines list must match num_mines"
             self.mines = set(mines)
         else:
@@ -52,11 +52,11 @@ class Board:
 
     def reveal(self, r, c):
         """
-        Reveal a cell.
+        Reveal a cell
         Returns:
-          -1 if mine,
-          0-8 for number of neighboring mines otherwise.
-        Auto-expands neighbors if result is 0.
+            -1 if mine
+            0-8 for number of neighboring mines otherwise
+        Auto-expands neighbors if result is 0
         """
         if not self.covered[r][c]:
             # already revealed
@@ -73,7 +73,7 @@ class Board:
         return value
 
     def _flood_fill_from(self, r, c):
-        """Reveal neighbors recursively for zero-valued cells."""
+        """Reveal neighbors recursively for value 0 cells"""
         stack = [(r, c)]
         while stack:
             cr, cc = stack.pop()
@@ -87,7 +87,7 @@ class Board:
         return (r, c) in self.mines
 
     def all_safe_revealed(self):
-        """Check win condition."""
+        """Check win condition"""
         for r in range(self.h):
             for c in range(self.w):
                 if (r, c) not in self.mines and self.covered[r][c]:
@@ -95,7 +95,7 @@ class Board:
         return True
 
     def visible_print(self):
-        """Print what a player / agent can see (covered, flags, numbers)."""
+        """Print what a player/agent can see (covered, flags, numbers)"""
         for r in range(self.h):
             row = []
             for c in range(self.w):
@@ -111,7 +111,7 @@ class Board:
             print(" ".join(row))
 
     def debug_print_full(self):
-        """Print full board (including mines) for debugging."""
+        """Print full board (including mines) for debugging"""
         for r in range(self.h):
             row = []
             for c in range(self.w):
