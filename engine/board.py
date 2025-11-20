@@ -50,6 +50,66 @@ class Board:
                 if 0 <= nr < self.h and 0 <= nc < self.w:
                     yield (nr, nc)
 
+    def reveal(self, r, c):
+        """
+        Reveal a cell.
+        Returns:
+          -1 if mine,
+          0-8 for number of neighboring mines otherwise.
+        Auto-expands neighbors if result is 0.
+        """
+        if not self.covered[r][c]:
+            # already revealed
+            return self.grid[r][c]
+
+        self.covered[r][c] = False
+
+        if (r, c) in self.mines:
+            return -1
+
+        value = self.grid[r][c]
+        if value == 0:
+            self._flood_fill_from(r, c)
+        return value
+
+    def _flood_fill_from(self, r, c):
+        """Reveal neighbors recursively for zero-valued cells."""
+        stack = [(r, c)]
+        while stack:
+            cr, cc = stack.pop()
+            for nr, nc in self.get_neighbors(cr, cc):
+                if self.covered[nr][nc] and (nr, nc) not in self.mines:
+                    self.covered[nr][nc] = False
+                    if self.grid[nr][nc] == 0:
+                        stack.append((nr, nc))
+
+    def is_mine(self, r, c):
+        return (r, c) in self.mines
+
+    def all_safe_revealed(self):
+        """Check win condition."""
+        for r in range(self.h):
+            for c in range(self.w):
+                if (r, c) not in self.mines and self.covered[r][c]:
+                    return False
+        return True
+
+    def visible_print(self):
+        """Print what a player / agent can see (covered, flags, numbers)."""
+        for r in range(self.h):
+            row = []
+            for c in range(self.w):
+                if (r, c) in self.flags:
+                    row.append("F")
+                elif self.covered[r][c]:
+                    row.append("#")  # hidden
+                else:
+                    if (r, c) in self.mines:
+                        row.append("*")
+                    else:
+                        row.append(str(self.grid[r][c]))
+            print(" ".join(row))
+
     def debug_print_full(self):
         """Print full board (including mines) for debugging."""
         for r in range(self.h):
