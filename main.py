@@ -1,4 +1,5 @@
 from engine.board import Board
+from csp.model import build_constraints_from_board
 
 
 def test_board_basic():
@@ -32,6 +33,24 @@ def test_reveal_logic():
     b.visible_print()
 
 
+def test_constraints():
+    mines = [(1, 1)]
+    b = Board(width=3, height=3, num_mines=1, mines=mines)
+
+    # Reveal some cells to get clues
+    b.reveal(0, 0)  # 1
+    b.reveal(0, 1)  # 1
+    b.reveal(1, 0)  # 1
+
+    print("Visible board:")
+    b.visible_print()
+    print()
+
+    constraints = build_constraints_from_board(b)
+    print("Constraints:")
+    for c in constraints:
+        print(c)
+
+
 if __name__ == "__main__":
-    # test_board_basic()
-    test_reveal_logic()
+    test_constraints()

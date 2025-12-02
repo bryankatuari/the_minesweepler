@@ -95,7 +95,7 @@ class Board:
         return True
 
     def visible_print(self):
-        """Print what a player/agent can see (covered, flags, numbers)"""
+        """Print what a player/agent can see (hidden, flags, numbers)"""
         for r in range(self.h):
             row = []
             for c in range(self.w):
