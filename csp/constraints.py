@@ -7,7 +7,7 @@ class Constraint:
     """
 
     def __init__(self, variables, required_sum):
-        self.variables = list(variables)  # list of (r, c)
+        self.variables = list(variables)
         self.required_sum = required_sum
 
     def __repr__(self):

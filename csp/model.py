@@ -11,7 +11,7 @@ def build_constraints_from_board(board):
 
     for r in range(board.h):
         for c in range(board.w):
-            # Only use revealed, non-mine cells with numbers
+            # only use revealed, non-mine cells with numbers
             if board.covered[r][c]:
                 continue
             if (r, c) in board.mines:
