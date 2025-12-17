@@ -1,57 +1,127 @@
-from typing import List, Set, Tuple
-from csp.constraints import Constraint
-
-Coord = Tuple[int, int]  # (row, col)
+# logic_agent/inference.py
+from csp.model import build_constraints_from_board
 
 
-def infer_safe_and_mines(
-    constraints: List[Constraint],
-    initially_known_mines: Set[Coord] = None,
-    initially_known_safe: Set[Coord] = None,
+def _select_unassigned_var_mrv(variables, domains, assignment, constraints):
+    """
+    MRV: choose unassigned var with smallest domain.
+    Tie-break: most constraining (appears in most constraints).
+    """
+    unassigned = [v for v in variables if v not in assignment]
+
+    def key(v):
+        dom_size = len(domains[v])
+        degree = sum(1 for c in constraints if v in c.variables)
+        return (dom_size, -degree)
+
+    return min(unassigned, key=key)
+
+
+def _forward_check(domains, constraints, assignment):
+    """
+    Basic filtering: if any constraint is already impossible under current assignment, fail.
+    (Domains are {0,1}, so we keep it simple & fast.)
+    """
+    for c in constraints:
+        if not c.is_satisfied(assignment):
+            return False
+    return True
+
+
+def _backtrack_all_solutions(
+    variables, constraints, domains, assignment, solutions, max_solutions=50000
 ):
     """
-    Deterministic reasoning over Minesweeper constraints.
-
-    constraints: list of Constraint, where each has:
-      - variables: list[(r,c)]
-      - required_sum: number of mines among those variables
-
-    initially_known_mines / initially_known_safe:
-      optional sets of (r,c) you already know.
-
-    Returns:
-      (safe_cells, mine_cells) as sets of (r,c).
+    Enumerate satisfying assignments over the frontier variables.
+    cap with max_solutions to avoid exploding on very large frontiers.
     """
-    known_mines: Set[Coord] = set(initially_known_mines or set())
-    known_safe: Set[Coord] = set(initially_known_safe or set())
+    if len(solutions) >= max_solutions:
+        return
 
-    changed = True
-    while changed:
-        changed = False
+    if len(assignment) == len(variables):
+        solutions.append(dict(assignment))
+        return
 
-        for c in constraints:
-            vars_set = set(c.variables)
+    var = _select_unassigned_var_mrv(variables, domains, assignment, constraints)
 
-            unknown = vars_set - known_mines - known_safe
-            if not unknown:
-                continue
+    # LCV: try value that rules out fewer options — here approximate by trying 0 then 1
+    for val in (0, 1):
+        assignment[var] = val
+        if _forward_check(domains, constraints, assignment):
+            _backtrack_all_solutions(
+                variables,
+                constraints,
+                domains,
+                assignment,
+                solutions,
+                max_solutions=max_solutions,
+            )
+        del assignment[var]
 
-            # mines already assigned in this constraint
-            mines_here = vars_set & known_mines
-            remaining_mines = c.required_sum - len(mines_here)
+        if len(solutions) >= max_solutions:
+            return
 
-            # Rule 1: no remaining mines -> unknown are safe
-            if remaining_mines == 0:
-                new_safe = unknown - known_safe
-                if new_safe:
-                    known_safe |= new_safe
-                    changed = True
 
-            # Rule 2: all unknown must be mines
-            elif remaining_mines == len(unknown):
-                new_mines = unknown - known_mines
-                if new_mines:
-                    known_mines |= new_mines
-                    changed = True
+def infer(board, max_solutions=50000):
+    """
+    Returns:
+      safe_set: cells proven safe (0 in all solutions)
+      mine_set: cells proven mines (1 in all solutions)
+      guess_info: ((r,c), mine_probability) for best guess, or None
+    """
+    constraints = build_constraints_from_board(board)
 
-    return known_safe, known_mines
+    # Frontier variables = all unknown cells that appear in any constraint
+    variables = sorted({v for c in constraints for v in c.variables})
+
+    # If nothing to reason about, no inference
+    if not variables:
+        return set(), set(), None
+
+    # Domains: boolean
+    domains = {v: {0, 1} for v in variables}
+
+    solutions = []
+    _backtrack_all_solutions(
+        variables, constraints, domains, {}, solutions, max_solutions=max_solutions
+    )
+
+    if not solutions:
+        # Inconsistent state (usually from a bad guess earlier) or over-flagging.
+        return set(), set(), None
+
+    safe = set()
+    mines = set()
+
+    # forced classification
+    for v in variables:
+        vals = {sol[v] for sol in solutions}
+        if vals == {0}:
+            safe.add(v)
+        elif vals == {1}:
+            mines.add(v)
+
+    # If we have forced moves, don't bother guessing
+    if safe or mines:
+        return safe, mines, None
+
+    # Otherwise compute mine probabilities for guessing
+    total = len(solutions)
+    mine_counts = {v: 0 for v in variables}
+    for sol in solutions:
+        for v in variables:
+            mine_counts[v] += sol[v]
+
+    probs = {v: mine_counts[v] / total for v in variables}
+
+    # Pick minimum mine probability among currently unknown/unflagged cells
+    candidates = [
+        v
+        for v in variables
+        if (not board.is_revealed(*v)) and (not board.is_flagged(*v))
+    ]
+    if not candidates:
+        return set(), set(), None
+
+    best = min(candidates, key=lambda v: probs[v])
+    return set(), set(), (best, probs[best])

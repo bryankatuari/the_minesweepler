@@ -1,36 +1,37 @@
 # csp/model.py
-from .constraints import Constraint
+from csp.constraints import SumConstraint
 
 
 def build_constraints_from_board(board):
     """
-    Look at each revealed numbered cell on the board and generate constraints:
-    sum(unknown_neighbors) = clue - flagged_neighbors
+    For each revealed clue cell with value k:
+      Let U = unknown neighbors (not revealed, not flagged)
+      Let F = number of flagged neighbors
+      Add constraint: sum(U) = k - F
     """
     constraints = []
 
     for r in range(board.h):
         for c in range(board.w):
-            # only use revealed, non-mine cells with numbers
-            if board.covered[r][c]:
-                continue
-            if (r, c) in board.mines:
+            if not board.is_revealed(r, c):
                 continue
 
             clue = board.grid[r][c]
-            if clue == 0:
-                continue  # no mines around, no info
+            if clue < 0:
+                continue  # shouldn't happen mid-game, but safe guard
 
-            neighbors = list(board.get_neighbors(r, c))
-            unknowns = [
-                pos
-                for pos in neighbors
-                if board.covered[pos[0]][pos[1]] and pos not in board.flags
-            ]
-            flagged = [pos for pos in neighbors if pos in board.flags]
+            unknown = []
+            flagged = 0
 
-            req = clue - len(flagged)
-            if unknowns and req >= 0:
-                constraints.append(Constraint(unknowns, req))
+            for nr, nc in board.neighbors(r, c):
+                if board.is_flagged(nr, nc):
+                    flagged += 1
+                elif not board.is_revealed(nr, nc):
+                    unknown.append((nr, nc))
+
+            if unknown:
+                total = clue - flagged
+                # If something is inconsistent (e.g., too many flags), the CSP will return no solutions
+                constraints.append(SumConstraint(unknown, total))
 
     return constraints

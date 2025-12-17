@@ -1,130 +1,111 @@
+# main.py
+import random
 from engine.board import Board
-from csp.model import build_constraints_from_board
-from logic_agent.inference import infer_safe_and_mines
+from logic_agent.inference import infer
 
 
-def test_board_basic():
-    """Test random and fixed mine generation for board representation"""
-    mines = None
-    b = Board(width=10, height=10, num_mines=10, mines=mines)
+def main():
+    w, h = 8, 8
+    mine_count = 10
+    start = (0, 0)
 
-    print("Full board (* for mines):")
-    b.debug_print_full()
+    all_cells = [(r, c) for r in range(h) for c in range(w)]
 
+    # First click safe: exclude start from mine placement
+    candidates = [cell for cell in all_cells if cell != start]
+    mines = set(random.sample(candidates, mine_count))
 
-def test_reveal_logic():
-    """Test reveal logic"""
-    mines = [(2, 2), (3, 3)]
-    b = Board(width=5, height=5, num_mines=2, mines=mines)
+    board = Board(w, h, mines)
 
-    print("Initial visible board:")
-    b.visible_print()
-    print()
+    forced_moves = 0
+    guesses = 0
+    steps = 0
 
-    print("Reveal (0, 0)…")
-    v = b.reveal(0, 0)
-    print("Value at (0,0):", v)
-    b.visible_print()
-    print("Win?", b.all_safe_revealed())
-    print()
+    # First reveal
+    if not board.reveal(*start):
+        board.visible_print()
+        print("\nBOOM — hit a mine on the first click (should not happen). Game over.")
+        return
 
-    print("Reveal a mine at (1, 1)…")
-    v = b.reveal(1, 1)
-    print("Value at (1,1):", v)
-    b.visible_print()
+    while True:
+        steps += 1
+        board.visible_print()
+        print()
 
+        if board.game_over:
+            print(
+                f"Game over. steps={steps}, forced_moves={forced_moves}, guesses={guesses}, flags={len(board.flags)}"
+            )
+            return
 
-def test_constraints():
-    """Test constraint logic"""
-    mines = [(1, 1)]
-    b = Board(width=3, height=3, num_mines=1, mines=mines)
+        if board.is_solved():
+            print(
+                f"Solved! steps={steps}, forced_moves={forced_moves}, guesses={guesses}, flags={len(board.flags)}"
+            )
+            return
 
-    # reveal some cells to get clues
-    b.reveal(0, 0)  # 1
-    b.reveal(0, 1)  # 1
-    b.reveal(1, 0)  # 1
+        safe, mines_found, guess_info = infer(board)
 
-    print("Visible board:")
-    b.visible_print()
-    print()
+        # Apply inferred mines
+        for m in mines_found:
+            board.flag(*m)
 
-    constraints = build_constraints_from_board(b)
-    print("Constraints:")
-    for c in constraints:
-        print(c)
+        # Apply inferred safe squares
+        made_progress = False
+        if safe:
+            made_progress = True
+            forced_moves += len(safe)
+            for s in safe:
+                if not board.reveal(*s):
+                    board.visible_print()
+                    print(
+                        "\nBOOM — inferred safe but hit a mine (should not happen). Game over."
+                    )
+                    return
 
+        # If no forced move, guess smartly (min mine probability)
+        if not made_progress:
+            unknown_choices = [
+                (r, c)
+                for r in range(h)
+                for c in range(w)
+                if not board.is_revealed(r, c) and not board.is_flagged(r, c)
+            ]
+            if not unknown_choices:
+                # Nothing left to do
+                if board.is_solved():
+                    print(
+                        f"Solved! steps={steps}, forced_moves={forced_moves}, guesses={guesses}, flags={len(board.flags)}"
+                    )
+                else:
+                    print("No moves left.")
+                return
 
-def test_inference_simple_mine():
-    print("=== Test: simple mine inference ===")
-    mines = [(0, 1)]
-    b = Board(width=2, height=2, num_mines=1, mines=mines)
+            if guess_info is not None:
+                (gr, gc), p = guess_info
+                # if somehow already revealed/flagged, fall back
+                if board.is_revealed(gr, gc) or board.is_flagged(gr, gc):
+                    gr, gc = random.choice(unknown_choices)
+                    p = None
+            else:
+                gr, gc = random.choice(unknown_choices)
+                p = None
 
-    # Reveal (0,0): neighbors = [(0,1), (1,0), (1,1)]
-    # Only one mine total; but other neighbors might be covered
-    b.reveal(0, 0)
-
-    print("Visible board:")
-    b.visible_print()
-    print()
-
-    constraints = build_constraints_from_board(b)
-    print("Constraints:", constraints)
-
-    safe, mines_deduced = infer_safe_and_mines(constraints)
-
-    print("Inferred safe cells:", safe)
-    print("Inferred mine cells:", mines_deduced)
-    print()
-
-
-def demo():
-    print("=== Deterministic Inference Test ===\n")
-
-    # 3x3 board with a single mine at (0,1)
-    mines = {(0, 1)}
-    b = Board(width=3, height=3, num_mines=len(mines), mines=mines)
-
-    print("FULL INTERNAL BOARD (for debugging / presentation):")
-    b.debug_print_full()
-    print("\n")
-
-    # Reveal a pattern that forces deduction:
-    # - Reveal (0,0), (1,0), (1,1)
-    #   For cell (0,0): clue = 1, and its only covered neighbor will be (0,1),
-    #   so the constraint is: sum([(0,1)]) = 1  -> (0,1) must be a mine.
-    for r, c in [(0, 0), (1, 0), (1, 1)]:
-        b.reveal(r, c)
-
-    print("VISIBLE BOARD BEFORE INFERENCE:")
-    b.visible_print()
-    print("\n")
-
-    # Build constraints from the partially revealed state
-    constraints = build_constraints_from_board(b)
-    print("GENERATED CONSTRAINTS:")
-    for c in constraints:
-        print("  ", c)
-    print()
-
-    # Run deterministic inference
-    safe, mines_deduced = infer_safe_and_mines(constraints)
-
-    print("INFERRED SAFE CELLS:")
-    print(" ", safe, "\n")
-
-    print("INFERRED MINES:")
-    print(" ", mines_deduced, "\n")
-
-    # Apply inference: flag mines, reveal safe cells
-    for cell in mines_deduced:
-        b.flags.add(cell)
-    for r, c in safe:
-        b.reveal(r, c)
-
-    print("VISIBLE BOARD AFTER INFERENCE:")
-    b.visible_print()
-    print("\n")
+            guesses += 1
+            ok = board.reveal(gr, gc)
+            if not ok:
+                board.visible_print()
+                if p is None:
+                    print(f"\nBOOM — guessed ({gr},{gc}). Game over.")
+                else:
+                    print(
+                        f"\nBOOM — guessed ({gr},{gc}) with mine_prob≈{p:.3f}. Game over."
+                    )
+                print(
+                    f"steps={steps}, forced_moves={forced_moves}, guesses={guesses}, flags={len(board.flags)}"
+                )
+                return
 
 
 if __name__ == "__main__":
-    demo()
+    main()
